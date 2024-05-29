@@ -249,80 +249,6 @@ void run_server_and_client(int server_port, char *client_hostname, int client_po
     close(client_sockfd);
     close(server_sockfd);
 }
-
-void run_udp_server_tcp_client(int udp_port, char *tcp_hostname, int tcp_port, char *e_command, char *i_command, char *o_command)
-{
-    int udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udp_sockfd < 0)
-    {
-        error("Error opening UDP server socket");
-    }
-
-    int optval = 1;
-    if (setsockopt(udp_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
-    {
-        error("Error setting UDP server socket options");
-    }
-
-    struct sockaddr_in udp_serv_addr;
-    memset(&udp_serv_addr, 0, sizeof(udp_serv_addr));
-    udp_serv_addr.sin_family = AF_INET;
-    udp_serv_addr.sin_port = htons(udp_port);
-    udp_serv_addr.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(udp_sockfd, (struct sockaddr *)&udp_serv_addr, sizeof(udp_serv_addr)) < 0)
-    {
-        error("Error on binding UDP server socket");
-    }
-
-    printf("UDP server is listening on port %d\n", udp_port);
-
-    int tcp_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (tcp_sockfd < 0)
-    {
-        error("Error opening TCP client socket");
-    }
-
-    struct sockaddr_in tcp_client_addr;
-    memset(&tcp_client_addr, 0, sizeof(tcp_client_addr));
-    tcp_client_addr.sin_family = AF_INET;
-    tcp_client_addr.sin_port = htons(tcp_port);
-
-    struct hostent *tcp_host = gethostbyname(tcp_hostname);
-    if (tcp_host == NULL)
-    {
-        error("Invalid TCP client hostname");
-    }
-
-    memcpy(&tcp_client_addr.sin_addr, tcp_host->h_addr_list[0], sizeof(struct in_addr));
-
-    if (connect(tcp_sockfd, (struct sockaddr *)&tcp_client_addr, sizeof(tcp_client_addr)) < 0)
-    {
-        error("Connection to TCP client failed");
-    }
-
-    printf("Connected to TCP client\n");
-
-    char buffer[BUFFER_SIZE];
-    struct sockaddr_in udp_client_addr;
-    socklen_t udp_client_addr_len = sizeof(udp_client_addr);
-
-    while (1)
-    {
-        memset(buffer, 0, BUFFER_SIZE);
-
-        ssize_t valread = recvfrom(udp_sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&udp_client_addr, &udp_client_addr_len);
-        if (valread < 0)
-        {
-            error("Error reading from UDP socket");
-        }
-
-        handle_client(udp_sockfd, tcp_sockfd, e_command, i_command, o_command, NULL);
-    }
-
-    close(tcp_sockfd);
-    close(udp_sockfd);
-}
 void run_server(int port, char *e_command, char *i_command, char *o_command, char *b_command)
 {
     int server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -519,6 +445,77 @@ void run_udp_client(char *hostname, int port, char *e_command, char *o_command, 
     close(sockfd);
 }
 
+void run_udp_server_tcp_client(int udp_port, char *tcp_hostname, int tcp_port, char *e_command, char *i_command)
+{
+    int udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udp_sockfd < 0)
+    {
+        error("Error opening UDP socket");
+    }
+
+    int optval = 1;
+    if (setsockopt(udp_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+    {
+        error("Error setting UDP socket options");
+    }
+
+    struct sockaddr_in udp_server_addr;
+    memset(&udp_server_addr, 0, sizeof(udp_server_addr));
+    udp_server_addr.sin_family = AF_INET;
+    udp_server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    udp_server_addr.sin_port = htons(udp_port);
+
+    if (bind(udp_sockfd, (struct sockaddr *)&udp_server_addr, sizeof(udp_server_addr)) < 0)
+    {
+        error("Error binding UDP socket");
+    }
+
+    int tcp_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (tcp_sockfd < 0)
+    {
+        error("Error opening TCP socket");
+    }
+
+    struct sockaddr_in tcp_serv_addr;
+    memset(&tcp_serv_addr, 0, sizeof(tcp_serv_addr));
+    tcp_serv_addr.sin_family = AF_INET;
+    tcp_serv_addr.sin_port = htons(tcp_port);
+
+    if (inet_pton(AF_INET, tcp_hostname, &tcp_serv_addr.sin_addr) <= 0)
+    {
+        error("Invalid address or hostname");
+    }
+
+    if (connect(tcp_sockfd, (struct sockaddr *)&tcp_serv_addr, sizeof(tcp_serv_addr)) < 0)
+    {
+        error("Connection to TCP server failed");
+    }
+
+    printf("Connected to TCP server\n");
+
+    char buffer[BUFFER_SIZE];
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+
+    while (1)
+    {
+        memset(buffer, 0, BUFFER_SIZE);
+
+        ssize_t n = recvfrom(udp_sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+        if (n < 0)
+        {
+            error("Error receiving UDP message");
+        }
+
+        int input_fd = udp_sockfd;
+        int output_fd = tcp_sockfd;
+        handle_client(input_fd, output_fd, e_command, i_command, NULL, NULL);
+    }
+
+    close(udp_sockfd);
+    close(tcp_sockfd);
+}
+
 int main(int argc, char *argv[])
 {
     int opt;
@@ -566,30 +563,22 @@ int main(int argc, char *argv[])
         }
     }
 
-    // if (e_command == NULL)
-    // {
-    //     error("No -e flag");
-    // }
-
-    if (tcp_server_port != NULL && o_command != NULL && strncmp(o_command, "TCPC", 4) == 0) {
-        char *client_info = o_command + 4;
-        char *client_hostname = strtok(client_info, ",");
-        char *client_port_str = strtok(NULL, ",");
-        if (client_hostname == NULL || client_port_str == NULL) {
-            error("Invalid client information");
-        }
-        int client_port = atoi(client_port_str);
-        run_server_and_client(atoi(tcp_server_port), client_hostname, client_port, e_command, i_command, o_command);
+    if (e_command == NULL)
+    {
+        error("No -e flag");
     }
-    else if(udp_server_port != NULL && o_command != NULL && strncmp(o_command, "TCPC", 4) == 0){
-        char *client_info = o_command + 4;
-        char *client_hostname = strtok(client_info, ",");
-        char *client_port_str = strtok(NULL, ",");
-        if (client_hostname == NULL || client_port_str == NULL) {
-            error("Invalid client information");
-        }
-        int client_port = atoi(client_port_str);
-        run_udp_server_tcp_client(atoi(udp_server_port), client_hostname, client_port, e_command, i_command, o_command);
+
+   
+    if(i_command != NULL && strncmp(i_command, "UDPS", 4) == 0 && o_command != NULL && strncmp(o_command, "TCPC", 4) == 0)
+    {
+        char *udp_port_str = i_command + 4;
+        int udp_port = atoi(udp_port_str);
+
+        char *tcp_hostname = strtok(o_command + 4, ",");
+        char *tcp_port_str = strtok(NULL, ",");
+        int tcp_port = atoi(tcp_port_str);
+
+        run_udp_server_tcp_client(udp_port, tcp_hostname, tcp_port, e_command, i_command);
     }
     else if (tcp_server_port != NULL)
     {
