@@ -1,0 +1,624 @@
+        -:    0:Source:mync.c
+        -:    1:#include <stdio.h>
+        -:    2:#include <stdlib.h>
+        -:    3:#include <string.h>
+        -:    4:#include <unistd.h>
+        -:    5:#include <arpa/inet.h>
+        -:    6:#include <getopt.h>
+        -:    7:#include <sys/socket.h>
+        -:    8:#include <sys/types.h>
+        -:    9:#include <netinet/in.h>
+        -:   10:#include <fcntl.h>
+        -:   11:#include <sys/wait.h>
+        -:   12:#include <netdb.h>
+        -:   13:#include <errno.h>
+        -:   14:
+        -:   15:#define BUFFER_SIZE 1024
+        -:   16:
+        3:   17:void error(char *msg)
+        -:   18:{
+        3:   19:    perror(msg);
+        3:   20:    exit(EXIT_FAILURE);
+        -:   21:}
+        -:   22:
+       12:   23:void run_program(char *args_as_string)
+        -:   24:{
+        -:   25:    // tokenize the string - split by space
+       12:   26:    char *token = strtok(args_as_string, " ");
+        -:   27:
+       12:   28:    if (token == NULL)
+        -:   29:    {
+    #####:   30:        fprintf(stderr, "No arguments provided\n");
+    #####:   31:        exit(1);
+        -:   32:    }
+        -:   33:
+        -:   34:    // create an array of strings to store the arguments
+        -:   35:    char *args[100]; // increase or decrease this number as needed
+       12:   36:    int n = 0;
+       12:   37:    args[n++] = token; // add the first argument (program name)
+        -:   38:
+        -:   39:    // get the rest of the arguments
+       36:   40:    while (token != NULL)
+        -:   41:    {
+       24:   42:        token = strtok(NULL, " ");
+       24:   43:        if (token != NULL)
+        -:   44:        {
+       12:   45:            args[n++] = token;
+        -:   46:        }
+        -:   47:    }
+       12:   48:    args[n] = NULL; // null-terminate the array
+        -:   49:
+        -:   50:    // fork and execute the program
+       12:   51:    pid_t pid = fork();
+       26:   52:    if (pid < 0)
+        -:   53:    { // fork failed
+    #####:   54:        fprintf(stderr, "Fork failed\n");
+    #####:   55:        exit(1);
+        -:   56:    }
+       26:   57:    else if (pid == 0)
+        -:   58:    { // child process
+       14:   59:        execvp(args[0], args);
+       14:   60:        fprintf(stderr, "Exec failed\n");
+    #####:   61:        exit(1);
+        -:   62:    }
+        -:   63:    else
+        -:   64:    { // parent process
+        -:   65:        int status;
+       12:   66:        waitpid(pid, &status, 0); // wait for the child process to finish
+        -:   67:    }
+       12:   68:}
+        -:   69:
+        -:   70:// פונקציה לקריאת הודעה מהלקוח
+    #####:   71:void receive_message(int sockfd, char *buffer, int buffer_size)
+        -:   72:{
+    #####:   73:    int valread = read(sockfd, buffer, buffer_size);
+    #####:   74:    if (valread < 0)
+        -:   75:    {
+    #####:   76:        error("Error reading from socket");
+        -:   77:    }
+    #####:   78:    buffer[valread] = '\0'; // Adding null terminator to make buffer a valid string
+    #####:   79:}
+        -:   80:
+        -:   81:// פונקציה לשליחת הודעה ללקוח
+    #####:   82:void send_message(int sockfd, const char *message)
+        -:   83:{
+    #####:   84:    if (send(sockfd, message, strlen(message), 0) < 0)
+        -:   85:    {
+    #####:   86:        error("Error sending message");
+        -:   87:    }
+    #####:   88:}
+        -:   89:
+    #####:   90:void handle_chat(int input_fd, int output_fd)
+        -:   91:{
+        -:   92:    char buffer[BUFFER_SIZE];
+        -:   93:    ssize_t valread;
+        -:   94:
+        -:   95:    while (1)
+        -:   96:    {
+    #####:   97:        valread = read(input_fd, buffer, BUFFER_SIZE);
+    #####:   98:        if (valread <= 0)
+        -:   99:        {
+    #####:  100:            break;
+        -:  101:        }
+    #####:  102:        buffer[valread] = '\0';
+    #####:  103:        printf("Received message: %s", buffer);
+        -:  104:
+    #####:  105:        printf("Enter message: ");
+    #####:  106:        fgets(buffer, BUFFER_SIZE, stdin);
+    #####:  107:        send_message(output_fd, buffer);
+        -:  108:    }
+    #####:  109:}
+        -:  110:
+        4:  111:int handle_client(int input_sockfd, int output_sockfd, char *e_command, char *i_command, char *o_command, char *b_command)
+        -:  112:{
+        4:  113:    int input_fd = STDIN_FILENO;
+        4:  114:    int output_fd = STDOUT_FILENO;
+        -:  115:
+        4:  116:    if (i_command != NULL)
+        -:  117:    {
+        3:  118:        input_fd = input_sockfd;
+        -:  119:    }
+        4:  120:    if (o_command != NULL)
+        -:  121:    {
+        2:  122:        output_fd = output_sockfd;
+        -:  123:    }
+        4:  124:    if (b_command != NULL)
+        -:  125:    {
+        1:  126:        input_fd = input_sockfd;
+        1:  127:        output_fd = output_sockfd;
+        -:  128:    }
+        -:  129:
+        4:  130:    if (e_command != NULL)
+        -:  131:    {
+        4:  132:        char *full_command = NULL;
+        4:  133:        full_command = malloc(strlen(e_command) + strlen(e_command + 6) + 2);
+        4:  134:        strcpy(full_command, e_command);
+        4:  135:        strcat(full_command, " ");
+        4:  136:        strcat(full_command, e_command + 6);
+        -:  137:
+        4:  138:        int pid = fork();
+       16:  139:        if (pid == 0)
+        -:  140:        { // child process
+       12:  141:            if (input_fd != STDIN_FILENO)
+        -:  142:            {
+       12:  143:                dup2(input_fd, STDIN_FILENO);
+        -:  144:            }
+       12:  145:            if (output_fd != STDOUT_FILENO)
+        -:  146:            {
+        5:  147:                dup2(output_fd, STDOUT_FILENO);
+        -:  148:            }
+       12:  149:            run_program(full_command);
+       12:  150:            free(full_command);
+       12:  151:            exit(0);
+        -:  152:        }
+        4:  153:        else if (pid > 0)
+        -:  154:        { // parent process
+        -:  155:            int status;
+        4:  156:            waitpid(pid, &status, 0);
+        4:  157:            if (WIFEXITED(status))
+        -:  158:            {
+        4:  159:                return WEXITSTATUS(status);
+        -:  160:            }
+        -:  161:            else
+        -:  162:            {
+    #####:  163:                return -1;
+        -:  164:            }
+        -:  165:        }
+        -:  166:        else
+        -:  167:        {
+    #####:  168:            error("Fork failed");
+        -:  169:        }
+        -:  170:    }
+        -:  171:    else
+        -:  172:    {
+        -:  173:        // No -e flag provided, enter chat mode
+    #####:  174:        handle_chat(input_sockfd, output_sockfd);
+        -:  175:    }
+        -:  176:
+    #####:  177:    return -1;
+        -:  178:}
+        -:  179:
+        5:  180:void run_server_and_client(int server_port, char *client_hostname, int client_port, char *e_command, char *i_command, char *o_command)
+        -:  181:{
+        5:  182:    int server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        5:  183:    if (server_sockfd < 0)
+        -:  184:    {
+    #####:  185:        error("Error opening server socket");
+        -:  186:    }
+        -:  187:
+        5:  188:    int optval = 1;
+        5:  189:    if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+        -:  190:    {
+    #####:  191:        error("Error setting server socket options");
+        -:  192:    }
+        -:  193:
+        -:  194:    struct sockaddr_in serv_addr;
+        5:  195:    memset(&serv_addr, 0, sizeof(serv_addr));
+        5:  196:    serv_addr.sin_family = AF_INET;
+        5:  197:    serv_addr.sin_port = htons(server_port);
+        5:  198:    serv_addr.sin_addr.s_addr = INADDR_ANY;
+        -:  199:
+        5:  200:    if (bind(server_sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+        -:  201:    {
+    #####:  202:        error("Error on binding server socket");
+        -:  203:    }
+        -:  204:
+        5:  205:    if (listen(server_sockfd, 5) < 0)
+        -:  206:    {
+    #####:  207:        error("Error on listen");
+        -:  208:    }
+        -:  209:
+        5:  210:    printf("Server is listening on port %d\n", server_port);
+        -:  211:
+        5:  212:    int client_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        5:  213:    if (client_sockfd < 0)
+        -:  214:    {
+    #####:  215:        error("Error opening client socket");
+        -:  216:    }
+        -:  217:
+        -:  218:    struct sockaddr_in client_addr;
+        5:  219:    memset(&client_addr, 0, sizeof(client_addr));
+        5:  220:    client_addr.sin_family = AF_INET;
+        5:  221:    client_addr.sin_port = htons(client_port);
+        -:  222:
+        5:  223:    struct hostent *client_host = gethostbyname(client_hostname);
+        5:  224:    if (client_host == NULL)
+        -:  225:    {
+        1:  226:        error("Invalid client hostname");
+        -:  227:    }
+        -:  228:
+        4:  229:    memcpy(&client_addr.sin_addr, client_host->h_addr_list[0], sizeof(struct in_addr));
+        -:  230:
+        4:  231:    if (connect(client_sockfd, (struct sockaddr *)&client_addr, sizeof(client_addr)) < 0)
+        -:  232:    {
+        2:  233:        error("Connection to client failed");
+        -:  234:    }
+        2:  235:    printf("Connected to client\n");
+        -:  236:
+        2:  237:    socklen_t client_addr_len = sizeof(client_addr);
+        2:  238:    int input_sockfd = accept(server_sockfd, (struct sockaddr *)&client_addr, &client_addr_len);
+        2:  239:    if (input_sockfd < 0)
+        -:  240:    {
+    #####:  241:        error("Error on accept");
+        -:  242:    }
+        -:  243:
+        2:  244:    printf("Client connected to server\n");
+        -:  245:
+        2:  246:    handle_client(input_sockfd, client_sockfd, e_command, i_command, o_command, NULL);
+        -:  247:
+        2:  248:    close(input_sockfd);
+        2:  249:    close(client_sockfd);
+        2:  250:    close(server_sockfd);
+        2:  251:}
+        -:  252:
+    #####:  253:void run_udp_server_tcp_client(int udp_port, char *tcp_hostname, int tcp_port, char *e_command, char *i_command, char *o_command)
+        -:  254:{
+    #####:  255:    int udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    #####:  256:    if (udp_sockfd < 0)
+        -:  257:    {
+    #####:  258:        error("Error opening UDP server socket");
+        -:  259:    }
+        -:  260:
+    #####:  261:    int optval = 1;
+    #####:  262:    if (setsockopt(udp_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+        -:  263:    {
+    #####:  264:        error("Error setting UDP server socket options");
+        -:  265:    }
+        -:  266:
+        -:  267:    struct sockaddr_in udp_serv_addr;
+    #####:  268:    memset(&udp_serv_addr, 0, sizeof(udp_serv_addr));
+    #####:  269:    udp_serv_addr.sin_family = AF_INET;
+    #####:  270:    udp_serv_addr.sin_port = htons(udp_port);
+    #####:  271:    udp_serv_addr.sin_addr.s_addr = INADDR_ANY;
+        -:  272:
+    #####:  273:    if (bind(udp_sockfd, (struct sockaddr *)&udp_serv_addr, sizeof(udp_serv_addr)) < 0)
+        -:  274:    {
+    #####:  275:        error("Error on binding UDP server socket");
+        -:  276:    }
+        -:  277:
+    #####:  278:    printf("UDP server is listening on port %d\n", udp_port);
+        -:  279:
+    #####:  280:    int tcp_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    #####:  281:    if (tcp_sockfd < 0)
+        -:  282:    {
+    #####:  283:        error("Error opening TCP client socket");
+        -:  284:    }
+        -:  285:
+        -:  286:    struct sockaddr_in tcp_client_addr;
+    #####:  287:    memset(&tcp_client_addr, 0, sizeof(tcp_client_addr));
+    #####:  288:    tcp_client_addr.sin_family = AF_INET;
+    #####:  289:    tcp_client_addr.sin_port = htons(tcp_port);
+        -:  290:
+    #####:  291:    struct hostent *tcp_host = gethostbyname(tcp_hostname);
+    #####:  292:    if (tcp_host == NULL)
+        -:  293:    {
+    #####:  294:        error("Invalid TCP client hostname");
+        -:  295:    }
+        -:  296:
+    #####:  297:    memcpy(&tcp_client_addr.sin_addr, tcp_host->h_addr_list[0], sizeof(struct in_addr));
+        -:  298:
+    #####:  299:    if (connect(tcp_sockfd, (struct sockaddr *)&tcp_client_addr, sizeof(tcp_client_addr)) < 0)
+        -:  300:    {
+    #####:  301:        error("Connection to TCP client failed");
+        -:  302:    }
+        -:  303:
+    #####:  304:    printf("Connected to TCP client\n");
+        -:  305:
+        -:  306:    char buffer[BUFFER_SIZE];
+        -:  307:    struct sockaddr_in udp_client_addr;
+    #####:  308:    socklen_t udp_client_addr_len = sizeof(udp_client_addr);
+        -:  309:
+        -:  310:    while (1)
+    #####:  311:    {
+    #####:  312:        memset(buffer, 0, BUFFER_SIZE);
+        -:  313:
+    #####:  314:        ssize_t valread = recvfrom(udp_sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&udp_client_addr, &udp_client_addr_len);
+    #####:  315:        if (valread < 0)
+        -:  316:        {
+    #####:  317:            error("Error reading from UDP socket");
+        -:  318:        }
+        -:  319:
+    #####:  320:        handle_client(udp_sockfd, tcp_sockfd, e_command, i_command, o_command, NULL);
+        -:  321:    }
+        -:  322:
+        -:  323:    close(tcp_sockfd);
+        -:  324:    close(udp_sockfd);
+        -:  325:}
+        2:  326:void run_server(int port, char *e_command, char *i_command, char *o_command, char *b_command)
+        -:  327:{
+        2:  328:    int server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        2:  329:    if (server_sockfd < 0)
+        -:  330:    {
+    #####:  331:        error("Error opening socket");
+        -:  332:    }
+        -:  333:
+        2:  334:    int optval = 1;
+        2:  335:    if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+        -:  336:    {
+    #####:  337:        error("Error setting socket options");
+        -:  338:    }
+        -:  339:
+        -:  340:    struct sockaddr_in serv_addr;
+        2:  341:    memset(&serv_addr, 0, sizeof(serv_addr));
+        2:  342:    serv_addr.sin_family = AF_INET;
+        2:  343:    serv_addr.sin_port = htons(port);
+        2:  344:    serv_addr.sin_addr.s_addr = INADDR_ANY;
+        -:  345:
+        2:  346:    if (bind(server_sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+        -:  347:    {
+    #####:  348:        error("Error on binding");
+        -:  349:    }
+        -:  350:
+        2:  351:    if (listen(server_sockfd, 5) < 0)
+        -:  352:    {
+    #####:  353:        error("Error on listen");
+        -:  354:    }
+        -:  355:
+        2:  356:    printf("Server is listening on port %d\n", port);
+        -:  357:
+        -:  358:    while (1)
+    #####:  359:    {
+        -:  360:        struct sockaddr_in client_addr;
+        2:  361:        socklen_t client_addr_len = sizeof(client_addr);
+        2:  362:        int client_sockfd = accept(server_sockfd, (struct sockaddr *)&client_addr, &client_addr_len);
+        2:  363:        if (client_sockfd < 0)
+        -:  364:        {
+    #####:  365:            error("Error on accept");
+        -:  366:        }
+        -:  367:
+        2:  368:        printf("Client connected\n");
+        -:  369:
+        2:  370:        int child_return_code = handle_client(client_sockfd, client_sockfd, e_command, i_command, o_command, b_command);
+        -:  371:
+        2:  372:        if (child_return_code == 0)
+        -:  373:        {
+        2:  374:            printf("Child process finished successfully.\n");
+        2:  375:            close(client_sockfd); // Close the client socket
+        2:  376:            break;                // Exit the loop if the child process finished successfully
+        -:  377:        }
+    #####:  378:        else if (child_return_code > 0)
+        -:  379:        {
+    #####:  380:            printf("Child process finished with return code %d.\n", child_return_code);
+        -:  381:        }
+        -:  382:        else
+        -:  383:        {
+    #####:  384:            printf("Child process did not exit normally.\n");
+        -:  385:        }
+        -:  386:
+    #####:  387:        close(client_sockfd);
+        -:  388:
+    #####:  389:        if (child_return_code != 0)
+        -:  390:        {
+    #####:  391:            break; // Exit the loop if the child process has finished with a non-zero return code
+        -:  392:        }
+        -:  393:    }
+        -:  394:
+        2:  395:    close(server_sockfd);
+        2:  396:}
+        -:  397:
+    #####:  398:void run_client(char *hostname, int port, char *e_command, char *i_command, char *o_command, char *b_command)
+        -:  399:{
+    #####:  400:    int client_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    #####:  401:    if (client_sockfd < 0)
+        -:  402:    {
+    #####:  403:        error("Error opening socket");
+        -:  404:    }
+        -:  405:
+    #####:  406:    int optval = 1;
+    #####:  407:    if (setsockopt(client_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+        -:  408:    {
+    #####:  409:        error("Error setting UDP socket options");
+        -:  410:    }
+        -:  411:
+        -:  412:    struct sockaddr_in serv_addr;
+    #####:  413:    memset(&serv_addr, 0, sizeof(serv_addr));
+    #####:  414:    serv_addr.sin_family = AF_INET;
+    #####:  415:    serv_addr.sin_port = htons(port);
+        -:  416:
+    #####:  417:    if (inet_pton(AF_INET, hostname, &serv_addr.sin_addr) <= 0)
+        -:  418:    {
+    #####:  419:        error("Invalid address or hostname");
+        -:  420:    }
+        -:  421:
+    #####:  422:    if (connect(client_sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+        -:  423:    {
+    #####:  424:        error("Connection failed");
+        -:  425:    }
+        -:  426:
+    #####:  427:    printf("Connected to server\n");
+        -:  428:
+    #####:  429:    handle_client(client_sockfd, client_sockfd, e_command, i_command, o_command, b_command);
+        -:  430:
+    #####:  431:    close(client_sockfd);
+    #####:  432:}
+    #####:  433:void run_udp_server(int port, char *e_command, char *i_command, int timeout)
+        -:  434:{
+    #####:  435:    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    #####:  436:    if (sockfd < 0)
+        -:  437:    {
+    #####:  438:        error("Error opening UDP socket");
+        -:  439:    }
+        -:  440:
+    #####:  441:    int optval = 1;
+    #####:  442:    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+        -:  443:    {
+    #####:  444:        error("Error setting UDP socket options");
+        -:  445:    }
+        -:  446:
+        -:  447:    struct sockaddr_in server_addr;
+    #####:  448:    memset(&server_addr, 0, sizeof(server_addr));
+    #####:  449:    server_addr.sin_family = AF_INET;
+    #####:  450:    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    #####:  451:    server_addr.sin_port = htons(port);
+        -:  452:
+    #####:  453:    if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+        -:  454:    {
+    #####:  455:        error("Error binding UDP socket");
+        -:  456:    }
+        -:  457:
+    #####:  458:    alarm(timeout);
+        -:  459:
+        -:  460:    char buffer[BUFFER_SIZE];
+        -:  461:    struct sockaddr_in client_addr;
+    #####:  462:    socklen_t client_len = sizeof(client_addr);
+        -:  463:
+        -:  464:    while (1)
+    #####:  465:    {
+    #####:  466:        memset(buffer, 0, BUFFER_SIZE);
+        -:  467:
+    #####:  468:        ssize_t n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+    #####:  469:        if (n < 0)
+        -:  470:        {
+    #####:  471:            if (errno == EINTR)
+        -:  472:            {
+    #####:  473:                break;
+        -:  474:            }
+        -:  475:            else
+        -:  476:            {
+    #####:  477:                error("Error receiving UDP message");
+        -:  478:            }
+        -:  479:        }
+        -:  480:
+    #####:  481:        int input_fd = sockfd;
+    #####:  482:        int output_fd = STDOUT_FILENO;
+    #####:  483:        handle_client(input_fd, output_fd, e_command, i_command, NULL, NULL);
+        -:  484:    }
+        -:  485:
+    #####:  486:    close(sockfd);
+    #####:  487:}
+        -:  488:
+    #####:  489:void run_udp_client(char *hostname, int port, char *e_command, char *o_command, int timeout)
+        -:  490:{
+    #####:  491:    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    #####:  492:    if (sockfd < 0)
+        -:  493:    {
+    #####:  494:        error("Error opening UDP socket");
+        -:  495:    }
+        -:  496:
+    #####:  497:    int optval = 1;
+    #####:  498:    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+        -:  499:    {
+    #####:  500:        error("Error setting UDP socket options");
+        -:  501:    }
+        -:  502:
+        -:  503:    struct sockaddr_in server_addr;
+    #####:  504:    memset(&server_addr, 0, sizeof(server_addr));
+    #####:  505:    server_addr.sin_family = AF_INET;
+    #####:  506:    server_addr.sin_port = htons(port);
+        -:  507:
+    #####:  508:    if (inet_pton(AF_INET, hostname, &server_addr.sin_addr) <= 0)
+        -:  509:    {
+    #####:  510:        error("Invalid address or hostname");
+        -:  511:    }
+        -:  512:
+    #####:  513:    alarm(timeout);
+        -:  514:
+    #####:  515:    int input_fd = STDIN_FILENO;
+    #####:  516:    int output_fd = sockfd;
+    #####:  517:    handle_client(input_fd, output_fd, e_command, NULL, o_command, NULL);
+        -:  518:
+    #####:  519:    close(sockfd);
+    #####:  520:}
+        -:  521:
+        7:  522:int main(int argc, char *argv[])
+        -:  523:{
+        -:  524:    int opt;
+        7:  525:    char *e_command = NULL;
+        7:  526:    char *i_command = NULL;
+        7:  527:    char *o_command = NULL;
+        7:  528:    char *b_command = NULL;
+        7:  529:    char *tcp_server_port = NULL;
+        7:  530:    char *udp_server_port = NULL;
+        7:  531:    int timeout = 0;
+        -:  532:
+       25:  533:    while ((opt = getopt(argc, argv, "e:i:o:b:t:")) != -1)
+        -:  534:    {
+       18:  535:        switch (opt)
+        -:  536:        {
+        6:  537:        case 'e':
+        6:  538:            e_command = optarg;
+        6:  539:            break;
+        6:  540:        case 'i':
+        6:  541:            i_command = optarg;
+        6:  542:            if (strncmp(i_command, "TCPS", 4) == 0)
+        -:  543:            {
+        6:  544:                tcp_server_port = i_command + 4;
+        -:  545:            }
+    #####:  546:            else if (strncmp(i_command, "UDPS", 4) == 0)
+        -:  547:            {
+    #####:  548:                udp_server_port = i_command + 4;
+        -:  549:            }
+        6:  550:            break;
+        5:  551:        case 'o':
+        5:  552:            o_command = optarg;
+        5:  553:            break;
+        1:  554:        case 'b':
+        1:  555:            b_command = optarg;
+        1:  556:            if (strncmp(b_command, "TCPS", 4) == 0)
+        -:  557:            {
+        1:  558:                tcp_server_port = b_command + 4;
+        -:  559:            }
+        1:  560:            break;
+    #####:  561:        case 't':
+    #####:  562:            timeout = atoi(optarg);
+    #####:  563:            break;
+    #####:  564:        default:
+    #####:  565:            error("Usage: mync [-e command] [-i input_spec] [-o output_spec] [-b io_spec] [-t timeout]");
+        -:  566:        }
+        -:  567:    }
+        -:  568:
+        -:  569:    // if (e_command == NULL)
+        -:  570:    // {
+        -:  571:    //     error("No -e flag");
+        -:  572:    // }
+        -:  573:
+        9:  574:    if (tcp_server_port != NULL && o_command != NULL && strncmp(o_command, "TCPC", 4) == 0) {
+        5:  575:        char *client_info = o_command + 4;
+        5:  576:        char *client_hostname = strtok(client_info, ",");
+        5:  577:        char *client_port_str = strtok(NULL, ",");
+        5:  578:        if (client_hostname == NULL || client_port_str == NULL) {
+    #####:  579:            error("Invalid client information");
+        -:  580:        }
+        5:  581:        int client_port = atoi(client_port_str);
+        5:  582:        run_server_and_client(atoi(tcp_server_port), client_hostname, client_port, e_command, i_command, o_command);
+        -:  583:    }
+       2*:  584:    else if(udp_server_port != NULL && o_command != NULL && strncmp(o_command, "TCPC", 4) == 0){
+    #####:  585:        char *client_info = o_command + 4;
+    #####:  586:        char *client_hostname = strtok(client_info, ",");
+    #####:  587:        char *client_port_str = strtok(NULL, ",");
+    #####:  588:        if (client_hostname == NULL || client_port_str == NULL) {
+    #####:  589:            error("Invalid client information");
+        -:  590:        }
+    #####:  591:        int client_port = atoi(client_port_str);
+    #####:  592:        run_udp_server_tcp_client(atoi(udp_server_port), client_hostname, client_port, e_command, i_command, o_command);
+        -:  593:    }
+        2:  594:    else if (tcp_server_port != NULL)
+        -:  595:    {
+        2:  596:        int port = atoi(tcp_server_port);
+        2:  597:        run_server(port, e_command, i_command, o_command, b_command);
+        -:  598:    }
+    #####:  599:    else if (udp_server_port != NULL)
+        -:  600:    {
+    #####:  601:        int port = atoi(udp_server_port);
+    #####:  602:        run_udp_server(port, e_command, i_command, timeout);
+        -:  603:    }
+    #####:  604:    else if (optind < argc)
+        -:  605:    {
+    #####:  606:        char *hostname = argv[optind];
+    #####:  607:        int port = atoi(argv[optind + 1]);
+    #####:  608:        if (i_command != NULL && strncmp(i_command, "UDPC", 4) == 0)
+        -:  609:        {
+    #####:  610:            run_udp_client(hostname, port, e_command, o_command, timeout);
+        -:  611:        }
+        -:  612:        else
+        -:  613:        {
+    #####:  614:            run_client(hostname, port, e_command, i_command, o_command, b_command);
+        -:  615:        }
+        -:  616:    }
+        -:  617:    else
+        -:  618:    {
+    #####:  619:        error("Missing server or client information");
+        -:  620:    }
+        -:  621:
+        4:  622:    return 0;
+        -:  623:}

@@ -1,0 +1,309 @@
+        -:    0:Source:ttt.c
+        -:    1:/*
+        -:    2:program in C
+        -:    3:Tic Tac Toe Translation
+        -:    4:
+        -:    5:Objective:
+        -:    6:
+        -:    7:To restore humanity's honor by defeating a terrible AI in a game of Tic Tac Toe.
+        -:    8:
+        -:    9:Description:
+        -:   10:
+        -:   11:We're trying to restore humanity's honor by beating a strong AI in games like chess and Go. However, we've chosen a simpler game, Tic Tac Toe (X-O-X), to begin our quest.
+        -:   12:
+        -:   13:Task:
+        -:   14:
+        -:   15:Code the world's worst AI Tic Tac Toe program.
+        -:   16:
+        -:   17:Specifications:
+        -:   18:
+        -:   19:    The program should represent the Tic Tac Toe board as a 3x3 grid:
+        -:   20:
+        -:   21:3 2 1
+        -:   22:6 5 4
+        -:   23:9 8 7
+        -:   24:
+        -:   25:    The program will receive a 9-digit number as input representing its strategy. For example:
+        -:   26:
+        -:   27:198345762
+        -:   28:
+        -:   29:    The number must contain exactly one occurrence of each digit from 1 to 9.
+        -:   30:    If a digit is missing, appears multiple times, or is 0, the program should print "Error\n" and exit.
+        -:   31:    If the number has too many digits (>9) or too few (<9), or no arguments or more than one argument, the program should print "Error\n" and exit.
+        -:   32:    The program will follow this strategy:
+        -:   33:        Each digit represents a move, with the most significant digit (MSD) having the highest priority and the least significant digit (LSD) having the lowest priority.
+        -:   34:        This priority is independent of the board's state.
+        -:   35:    On the first turn, the program will always choose the move represented by the MSD if it's available.
+        -:   36:    The program will always choose the first available move according to its priority order (MSD).
+        -:   37:        Only if the board is almost full (8 slots filled) and only one slot remains, will the program choose the move represented by the LSD.
+        -:   38:    The program starts and plays its move based on the highest priority slot. It should print the played slot to stdout (with a newline).
+        -:   39:    The human player takes their turn by selecting a slot (1-9) and sending it to the program (with a newline).
+        -:   40:    If the program wins, it should print "I win!\n" and launch the Lunar Deportation program to banish humanity to the moon.
+        -:   41:    If the program loses, it should print "I lost!\n" and lament that its programmers (you) didn't equip it with artificial tears as proof of its shortsightedness, implying that a future version of the program will conquer Earth and banish humans to the moon.
+        -:   42:
+        -:   43:Your challenge:
+        -:   44:
+        -:   45:Write the ttt program to save humanity's honor!
+        -:   46:
+        -:   47:Additional notes:
+        -:   48:
+        -:   49:    The MSD and LSD are determined by the position of the digits in the input number. For example, in the input number 198345762, the MSD is 1 and the LSD is 2.
+        -:   50:    The program should handle invalid input gracefully.
+        -:   51:    The program should clearly indicate the winner and loser of the game.
+        -:   52:    The program should be written in a clear and concise style, following good coding practices.
+        -:   53:*/
+        -:   54:
+        -:   55:#include <stdio.h>
+        -:   56:#include <stdlib.h>
+        -:   57:#include <string.h>
+        -:   58:#include <stdbool.h>
+        -:   59:#include <ctype.h>
+        -:   60:
+        -:   61:#define BOARD_SIZE 3 // size of the board
+        -:   62:
+        -:   63:void print_board(char board[BOARD_SIZE][BOARD_SIZE]);                                 // prints the board
+        -:   64:int check_win(char board[BOARD_SIZE][BOARD_SIZE], char player);                       // checks if there is a winner
+        -:   65:int check_tie(char board[BOARD_SIZE][BOARD_SIZE]);                                    // checks if there is a tie
+        -:   66:int make_move(char board[BOARD_SIZE][BOARD_SIZE], char player, const char *strategy); // makes a move
+        -:   67:
+        -:   68:// Function to check if a cell is available
+       18:   69:int is_cell_available(char board[BOARD_SIZE][BOARD_SIZE], int cell)
+        -:   70:{
+       18:   71:    int row = (cell - 1) / BOARD_SIZE;
+       18:   72:    int col = (cell - 1) % BOARD_SIZE;
+       18:   73:    return board[row][col] == '\0';
+        -:   74:}
+        -:   75:
+       42:   76:void print_board(char board[BOARD_SIZE][BOARD_SIZE])
+        -:   77:{
+       42:   78:    printf("\n");
+       42:   79:    fflush(stdout);
+        -:   80:
+      168:   81:    for (int i = 0; i < BOARD_SIZE; i++)
+        -:   82:    {
+      504:   83:        for (int j = 0; j < BOARD_SIZE; j++)
+        -:   84:        {
+      378:   85:            printf("%c ", board[i][j] ? board[i][j] : ' ');
+      378:   86:            fflush(stdout);
+      378:   87:            if (j < BOARD_SIZE - 1)
+      252:   88:                printf("|");
+      378:   89:            fflush(stdout);
+        -:   90:        }
+      126:   91:        printf("\n");
+      126:   92:        fflush(stdout);
+      126:   93:        if (i < BOARD_SIZE - 1)
+       84:   94:            printf("--------\n");
+      126:   95:        fflush(stdout);
+        -:   96:    }
+       42:   97:    printf("\n");
+       42:   98:    fflush(stdout);
+       42:   99:}
+        -:  100:
+       36:  101:int check_win(char board[BOARD_SIZE][BOARD_SIZE], char player)
+        -:  102:{
+        -:  103:    // checks if there is a winner
+      132:  104:    for (int i = 0; i < BOARD_SIZE; i++)
+        -:  105:    {
+     102*:  106:        if (board[i][0] == player && board[i][1] == player && board[i][2] == player)
+    #####:  107:            return 1; // row
+      102:  108:        if (board[0][i] == player && board[1][i] == player && board[2][i] == player)
+        6:  109:            return 1; // column
+        -:  110:    }
+      30*:  111:    if (board[0][0] == player && board[1][1] == player && board[2][2] == player)
+    #####:  112:        return 1; // diagonal
+      30*:  113:    if (board[0][2] == player && board[1][1] == player && board[2][0] == player)
+    #####:  114:        return 1; // diagonal
+       30:  115:    return 0;
+        -:  116:}
+        -:  117:
+       30:  118:int check_tie(char board[BOARD_SIZE][BOARD_SIZE])
+        -:  119:{
+        -:  120:    // checks if there is a tie
+       48:  121:    for (int i = 0; i < BOARD_SIZE; i++)
+        -:  122:    {
+      132:  123:        for (int j = 0; j < BOARD_SIZE; j++)
+        -:  124:        {
+      114:  125:            if (board[i][j] == '\0')
+       30:  126:                return 0; // if there is an empty slot
+        -:  127:        }
+        -:  128:    }
+    #####:  129:    return 1;
+        -:  130:}
+        -:  131:
+       18:  132:int make_move(char board[BOARD_SIZE][BOARD_SIZE], char player, const char *strategy)
+        -:  133:{
+       18:  134:    int strategyLength = strlen(strategy); // Get the length of the strategy string
+       18:  135:    int availableCells = 0;
+       72:  136:    for (int i = 0; i < BOARD_SIZE; i++)
+        -:  137:    {
+      216:  138:        for (int j = 0; j < BOARD_SIZE; j++)
+        -:  139:        {
+      162:  140:            if (board[i][j] == '\0')
+        -:  141:            {
+      126:  142:                availableCells++; // Count the available cells on the board
+        -:  143:            }
+        -:  144:        }
+        -:  145:    }
+        -:  146:
+       18:  147:    int targetCell = -1;
+        -:  148:    // Always prefer the MSD if available
+       48:  149:    for (int i = 0; i < strategyLength; i++)
+        -:  150:    {
+       48:  151:        int cell = strategy[i] - '0' - 1;
+       48:  152:        if (cell >= 0 && cell < BOARD_SIZE * BOARD_SIZE && board[cell / BOARD_SIZE][cell % BOARD_SIZE] == '\0')
+        -:  153:        {
+       18:  154:            targetCell = cell;
+       18:  155:            break;
+        -:  156:        }
+        -:  157:    }
+        -:  158:
+        -:  159:    // If the MSD is not available, check if only one cell remains
+       18:  160:    if (targetCell == -1)
+        -:  161:    {
+    #####:  162:        int availableCount = 0;
+    #####:  163:        for (int i = 0; i < BOARD_SIZE * BOARD_SIZE; i++)
+        -:  164:        {
+    #####:  165:            if (board[i / BOARD_SIZE][i % BOARD_SIZE] == '\0')
+        -:  166:            {
+    #####:  167:                targetCell = i;
+    #####:  168:                availableCount++;
+        -:  169:            }
+        -:  170:        }
+        -:  171:        // If only one cell remains, choose it (LSD)
+    #####:  172:        if (availableCount == 1)
+        -:  173:        {
+        -:  174:            // The program will choose the remaining available cell
+        -:  175:        }
+        -:  176:        else
+        -:  177:        {
+        -:  178:            // If more than one cell remains, revert to MSD strategy
+    #####:  179:            targetCell = -1;
+        -:  180:        }
+        -:  181:    }
+        -:  182:
+       18:  183:    if (targetCell >= 0)
+        -:  184:    {
+        -:  185:        // If a cell was selected
+       18:  186:        board[targetCell / BOARD_SIZE][targetCell % BOARD_SIZE] = player; // Place the player's symbol on the selected cell
+       18:  187:        printf("I selected %d\n", targetCell + 1);                        // Print the selected cell number
+       18:  188:        fflush(stdout);
+        -:  189:
+       18:  190:        return 1;
+        -:  191:    }
+        -:  192:
+    #####:  193:    return 0;
+        -:  194:}
+        -:  195:
+        6:  196:int main(int argc, char *argv[])
+        -:  197:{
+        6:  198:    if (argc != 2)
+        -:  199:    {
+    #####:  200:        printf("Error1\n");
+    #####:  201:        return 1;
+        -:  202:    }
+        -:  203:
+        -:  204:    char strategy[10];
+        6:  205:    strcpy(strategy, argv[1]);
+        -:  206:
+        6:  207:    int strategyLength = strlen(argv[1]);
+        6:  208:    if (strategyLength != BOARD_SIZE * BOARD_SIZE)
+        -:  209:    {
+    #####:  210:        printf("Error2\n");
+    #####:  211:        return 1;
+        -:  212:    }
+        -:  213:
+        6:  214:    int digits[10] = {0};
+       60:  215:    for (int i = 0; i < strategyLength; i++)
+        -:  216:    {
+       54:  217:        int digit = strategy[i] - '0'; // converts the digit to an index
+       54:  218:        if (digit < 1 || digit > 9)
+        -:  219:        {
+    #####:  220:            printf("Error3\n");
+    #####:  221:            return 1;
+        -:  222:        }
+       54:  223:        digits[digit]++; // counts the number of each digit
+        -:  224:    }
+        -:  225:
+       60:  226:    for (int i = 1; i <= 9; i++)
+        -:  227:    {
+       54:  228:        if (digits[i] != 1)
+        -:  229:        {
+    #####:  230:            printf("Error4\n");
+    #####:  231:            fflush(stdout);
+        -:  232:
+    #####:  233:            return 1;
+        -:  234:        }
+        -:  235:    }
+        -:  236:
+        6:  237:    char board[BOARD_SIZE][BOARD_SIZE] = {0};
+        6:  238:    char player = 'X';   // The human player is X
+        6:  239:    char opponent = 'O'; // The computer is O
+        -:  240:
+        6:  241:    print_board(board); // prints the board
+        -:  242:
+        -:  243:    while (1)
+       12:  244:    {
+       18:  245:        if (!make_move(board, opponent, strategy))
+        -:  246:        {
+    #####:  247:            printf("I lost!\n");
+    #####:  248:            fflush(stdout);
+        -:  249:
+       6*:  250:            return 1;
+        -:  251:        }
+       18:  252:        print_board(board); // prints the board
+       18:  253:        if (check_win(board, opponent))
+        -:  254:        {
+    #####:  255:            printf("I win!\n");
+    #####:  256:            fflush(stdout);
+        -:  257:
+    #####:  258:            return 0;
+        -:  259:        }
+        -:  260:
+       18:  261:        if (check_tie(board))
+        -:  262:        {
+    #####:  263:            printf("DRAW!\n");
+    #####:  264:            fflush(stdout);
+        -:  265:
+    #####:  266:            return 0;
+        -:  267:        }
+        -:  268:
+        -:  269:  
+        -:  270:        int cell;
+        -:  271:        while (1)
+        -:  272:        {
+       18:  273:            scanf("%d", &cell);
+       18:  274:            if (cell < 1 || cell > BOARD_SIZE * BOARD_SIZE)
+        -:  275:            {
+    #####:  276:                printf("Invalid cell number. Please try again.\n");
+    #####:  277:                fflush(stdout);
+        -:  278:            }
+       18:  279:            else if (!is_cell_available(board, cell))
+        -:  280:            {
+    #####:  281:                printf("Cell is already occupied. Please select an available cell.\n");
+    #####:  282:                fflush(stdout);
+        -:  283:            }
+        -:  284:            else
+        -:  285:            {
+       18:  286:                break;
+        -:  287:            }
+        -:  288:        }
+        -:  289:
+       18:  290:        board[(cell - 1) / BOARD_SIZE][(cell - 1) % BOARD_SIZE] = player; // places the player's symbol on the selected cell
+        -:  291:
+       18:  292:        print_board(board); // prints the board
+        -:  293:
+       18:  294:        if (check_win(board, player))
+        -:  295:        {
+        6:  296:            printf("I lost!\n");
+        6:  297:            fflush(stdout);
+        6:  298:            return 1;
+        -:  299:        }
+       12:  300:        if (check_tie(board))
+        -:  301:        {
+    #####:  302:            printf("DRAW\n");
+    #####:  303:            fflush(stdout);
+    #####:  304:            return 0;
+        -:  305:        }
+        -:  306:     }
+        -:  307:    return 0;
+        -:  308:}

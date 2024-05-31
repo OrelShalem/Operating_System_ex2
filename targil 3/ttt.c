@@ -40,16 +40,7 @@ Specifications:
     If the program wins, it should print "I win!\n" and launch the Lunar Deportation program to banish humanity to the moon.
     If the program loses, it should print "I lost!\n" and lament that its programmers (you) didn't equip it with artificial tears as proof of its shortsightedness, implying that a future version of the program will conquer Earth and banish humans to the moon.
 
-Your challenge:
 
-Write the ttt program to save humanity's honor!
-
-Additional notes:
-
-    The MSD and LSD are determined by the position of the digits in the input number. For example, in the input number 198345762, the MSD is 1 and the LSD is 2.
-    The program should handle invalid input gracefully.
-    The program should clearly indicate the winner and loser of the game.
-    The program should be written in a clear and concise style, following good coding practices.
 */
 
 #include <stdio.h>

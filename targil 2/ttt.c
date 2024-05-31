@@ -40,16 +40,7 @@ Specifications:
     If the program wins, it should print "I win!\n" and launch the Lunar Deportation program to banish humanity to the moon.
     If the program loses, it should print "I lost!\n" and lament that its programmers (you) didn't equip it with artificial tears as proof of its shortsightedness, implying that a future version of the program will conquer Earth and banish humans to the moon.
 
-Your challenge:
 
-Write the ttt program to save humanity's honor!
-
-Additional notes:
-
-    The MSD and LSD are determined by the position of the digits in the input number. For example, in the input number 198345762, the MSD is 1 and the LSD is 2.
-    The program should handle invalid input gracefully.
-    The program should clearly indicate the winner and loser of the game.
-    The program should be written in a clear and concise style, following good coding practices.
 */
 
 #include <stdio.h>
@@ -64,6 +55,14 @@ void print_board(char board[BOARD_SIZE][BOARD_SIZE]);                           
 int check_win(char board[BOARD_SIZE][BOARD_SIZE], char player);                       // checks if there is a winner
 int check_tie(char board[BOARD_SIZE][BOARD_SIZE]);                                    // checks if there is a tie
 int make_move(char board[BOARD_SIZE][BOARD_SIZE], char player, const char *strategy); // makes a move
+
+// Function to check if a cell is available
+int is_cell_available(char board[BOARD_SIZE][BOARD_SIZE], int cell)
+{
+    int row = (cell - 1) / BOARD_SIZE;
+    int col = (cell - 1) % BOARD_SIZE;
+    return board[row][col] == '\0';
+}
 
 void print_board(char board[BOARD_SIZE][BOARD_SIZE])
 {
@@ -138,37 +137,24 @@ int make_move(char board[BOARD_SIZE][BOARD_SIZE], char player, const char *strat
 
     int targetCell = -1;
     // Always prefer the MSD if available
-    for (int i = 0; i < strategyLength; i++) {
+    for (int i = 0; i < strategyLength; i++)
+    {
         int cell = strategy[i] - '0' - 1;
-        if (cell >= 0 && cell < BOARD_SIZE * BOARD_SIZE && board[cell / BOARD_SIZE][cell % BOARD_SIZE] == '\0') {
+        if (cell >= 0 && cell < BOARD_SIZE * BOARD_SIZE && board[cell / BOARD_SIZE][cell % BOARD_SIZE] == '\0')
+        {
             targetCell = cell;
             break;
         }
     }
 
-    // If the MSD is not available, check if only one cell remains
-    if (targetCell == -1) {
-        int availableCount = 0;
-        for (int i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
-            if (board[i / BOARD_SIZE][i % BOARD_SIZE] == '\0') {
-                targetCell = i;
-                availableCount++;
-            }
-        }
-        // If only one cell remains, choose it (LSD)
-        if (availableCount == 1) {
-            // The program will choose the remaining available cell
-        } else {
-            // If more than one cell remains, revert to MSD strategy
-            targetCell = -1;
-        }
-    }
 
     if (targetCell >= 0)
     {
         // If a cell was selected
         board[targetCell / BOARD_SIZE][targetCell % BOARD_SIZE] = player; // Place the player's symbol on the selected cell
-        printf("I selected %d\n", targetCell + 1); // Print the selected cell number
+        printf("I selected %d\n", targetCell + 1);                        // Print the selected cell number
+        fflush(stdout);
+
         return 1;
     }
 
@@ -210,12 +196,14 @@ int main(int argc, char *argv[])
         if (digits[i] != 1)
         {
             printf("Error4\n");
+            fflush(stdout);
+
             return 1;
         }
     }
 
     char board[BOARD_SIZE][BOARD_SIZE] = {0};
-    char player = 'X'; // The human player is X
+    char player = 'X';   // The human player is X
     char opponent = 'O'; // The computer is O
 
     print_board(board); // prints the board
@@ -225,42 +213,64 @@ int main(int argc, char *argv[])
         if (!make_move(board, opponent, strategy))
         {
             printf("I lost!\n");
+            fflush(stdout);
+
             return 1;
         }
         print_board(board); // prints the board
         if (check_win(board, opponent))
         {
             printf("I win!\n");
+            fflush(stdout);
+
             return 0;
         }
 
         if (check_tie(board))
         {
             printf("DRAW!\n");
+            fflush(stdout);
+
             return 0;
         }
 
+  
         int cell;
-        scanf("%d", &cell);
-        if (cell < 1 || cell > BOARD_SIZE * BOARD_SIZE || board[(cell - 1) / BOARD_SIZE][(cell - 1) % BOARD_SIZE] != '\0') {// checks if the cell is valid
-            printf("Error5\n");
-            return 1;
+        while (1)
+        {
+            scanf("%d", &cell);
+            if (cell < 1 || cell > BOARD_SIZE * BOARD_SIZE)
+            {
+                printf("Invalid cell number. Please try again.\n");
+                fflush(stdout);
+            }
+            else if (!is_cell_available(board, cell))
+            {
+                printf("Cell is already occupied. Please select an available cell.\n");
+                fflush(stdout);
+            }
+            else
+            {
+                break;
+            }
         }
 
-        board[(cell - 1)  / BOARD_SIZE][(cell - 1)  % BOARD_SIZE] = player;// places the player's symbol on the selected cell
+        board[(cell - 1) / BOARD_SIZE][(cell - 1) % BOARD_SIZE] = player; // places the player's symbol on the selected cell
 
         print_board(board); // prints the board
 
         if (check_win(board, player))
         {
             printf("I lost!\n");
+            fflush(stdout);
             return 1;
         }
         if (check_tie(board))
         {
             printf("DRAW\n");
+            fflush(stdout);
             return 0;
         }
-    }
+     }
     return 0;
 }

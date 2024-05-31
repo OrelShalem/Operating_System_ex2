@@ -16,14 +16,14 @@ Example: mync -e ttt 198345762
 #include <sys/wait.h>
 
 int main(int argc, char *argv[]) {
+    // Check if the number of arguments is less than 3 or the first argument is not "-e"
     if (argc < 3 || strcmp(argv[1], "-e") != 0) {
         fprintf(stderr, "Usage: %s -e <program_name> [program_arguments]\n", argv[0]);
         return 1;
     }
 
     char *program_name = argv[2]; // The name of the program to run
-    char **program_args = &argv[2];// The arguments to the program to run
-    //printf("Running program '%s' with arguments '%s'\n", program_name, *program_args);
+    char **program_args = &argv[2]; // The arguments to the program to run
 
     // Create a pipe for redirecting the program's output
     int output_pipe[2];
@@ -70,12 +70,11 @@ int main(int argc, char *argv[]) {
             printf("%s", buffer);
         }
 
+        // Wait for the child process to finish
+        wait(NULL);
+
         // Close the read end of the pipe
         close(output_pipe[0]);
-
-        // Wait for the child process to exit
-        int status;
-        waitpid(child_pid, &status, 0);
     }
 
     return 0;

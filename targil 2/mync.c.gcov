@@ -1,0 +1,83 @@
+        -:    0:Source:mync.c
+        -:    1:/*
+        -:    2:Program: mync (My Neat C)
+        -:    3:Description: This program takes another program as an argument and runs it,
+        -:    4:             redirecting its input and output streams.
+        -:    5:
+        -:    6:Usage: mync -e <program_name> [program_arguments]
+        -:    7:
+        -:    8:Example: mync -e ttt 198345762
+        -:    9:         (This will run the 'ttt' program from the previous step with the argument '198345762')
+        -:   10:*/
+        -:   11:
+        -:   12:#include <stdio.h>
+        -:   13:#include <stdlib.h>
+        -:   14:#include <string.h>
+        -:   15:#include <unistd.h>
+        -:   16:#include <sys/wait.h>
+        -:   17:
+        5:   18:int main(int argc, char *argv[]) {
+        5:   19:    if (argc < 3 || strcmp(argv[1], "-e") != 0) {
+        1:   20:        fprintf(stderr, "Usage: %s -e <program_name> [program_arguments]\n", argv[0]);
+        1:   21:        return 1;
+        -:   22:    }
+        -:   23:
+        4:   24:    char *program_name = argv[2]; // The name of the program to run
+        4:   25:    char **program_args = &argv[2];// The arguments to the program to run
+        -:   26:    //printf("Running program '%s' with arguments '%s'\n", program_name, *program_args);
+        -:   27:
+        -:   28:    // Create a pipe for redirecting the program's output
+        -:   29:    int output_pipe[2];
+        4:   30:    if (pipe(output_pipe) == -1) {
+    #####:   31:        perror("pipe");
+    #####:   32:        return 1;
+        -:   33:    }
+        -:   34:
+        -:   35:    // Fork a child process to run the program
+        4:   36:    pid_t child_pid = fork();
+        4:   37:    if (child_pid == -1) {
+    #####:   38:        perror("fork");
+    #####:   39:        return 1;
+        -:   40:    }
+        -:   41:
+        4:   42:    if (child_pid == 0) {
+        -:   43:        // Child process
+        -:   44:
+        -:   45:        // Redirect the child's output to the write end of the pipe
+        1:   46:        if (dup2(output_pipe[1], STDOUT_FILENO) == -1) {
+    #####:   47:            perror("dup2");
+    #####:   48:            return 1;
+        -:   49:        }
+        -:   50:
+        -:   51:        // Close the unused pipe ends
+        1:   52:        close(output_pipe[0]);
+        1:   53:        close(output_pipe[1]);
+        -:   54:
+        -:   55:        // Execute the program
+        1:   56:        execvp(program_name, program_args);
+        1:   57:        perror("execvp");
+        1:   58:        return 1;
+        -:   59:    } else {
+        -:   60:        // Parent process
+        -:   61:
+        -:   62:        // Close the write end of the pipe
+        3:   63:        close(output_pipe[1]);
+        -:   64:
+        -:   65:        // Read the program's output from the read end of the pipe
+        -:   66:        char buffer[4096];
+        -:   67:        ssize_t bytes_read;
+       18:   68:        while ((bytes_read = read(output_pipe[0], buffer, sizeof(buffer) - 1)) > 0) {
+       15:   69:            buffer[bytes_read] = '\0';
+       15:   70:            printf("%s", buffer);
+        -:   71:        }
+        -:   72:
+        -:   73:        // Close the read end of the pipe
+        3:   74:        close(output_pipe[0]);
+        -:   75:
+        -:   76:        // Wait for the child process to exit
+        -:   77:        int status;
+        3:   78:        waitpid(child_pid, &status, 0);
+        -:   79:    }
+        -:   80:
+        3:   81:    return 0;
+        -:   82:}

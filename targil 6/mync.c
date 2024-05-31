@@ -16,15 +16,17 @@
 #define BUFFER_SIZE 1024
 #define UNIX_DOMAIN_PATH_MAX 108
 
+// This function prints an error message and exits the program
 void error(char *msg)
 {
     perror(msg);
     exit(EXIT_FAILURE);
 }
 
+// This function runs the specified program with the given arguments
 void run_program(char *args_as_string)
 {
-    // tokenize the string - split by space
+    // Tokenize the string - split by space
     char *token = strtok(args_as_string, " ");
 
     if (token == NULL)
@@ -33,12 +35,12 @@ void run_program(char *args_as_string)
         exit(1);
     }
 
-    // create an array of strings to store the arguments
-    char *args[100]; // increase or decrease this number as needed
+    // Create an array of strings to store the arguments
+    char *args[100]; // Increase or decrease this number as needed
     int n = 0;
-    args[n++] = token; // add the first argument (program name)
+    args[n++] = token; // Add the first argument (program name)
 
-    // get the rest of the arguments
+    // Get the rest of the arguments
     while (token != NULL)
     {
         token = strtok(NULL, " ");
@@ -47,29 +49,29 @@ void run_program(char *args_as_string)
             args[n++] = token;
         }
     }
-    args[n] = NULL; // null-terminate the array
+    args[n] = NULL; // Null-terminate the array
 
-    // fork and execute the program
+    // Fork and execute the program
     pid_t pid = fork();
     if (pid < 0)
-    { // fork failed
+    { // Fork failed
         fprintf(stderr, "Fork failed\n");
         exit(1);
     }
     else if (pid == 0)
-    { // child process
+    { // Child process
         execvp(args[0], args);
         fprintf(stderr, "Exec failed\n");
         exit(1);
     }
     else
-    { // parent process
+    { // Parent process
         int status;
-        waitpid(pid, &status, 0); // wait for the child process to finish
+        waitpid(pid, &status, 0); // Wait for the child process to finish
     }
 }
 
-// פונקציה לקריאת הודעה מהלקוח
+// This function reads a message from the client
 void receive_message(int sockfd, char *buffer, int buffer_size)
 {
     int valread = read(sockfd, buffer, buffer_size);
@@ -80,7 +82,7 @@ void receive_message(int sockfd, char *buffer, int buffer_size)
     buffer[valread] = '\0'; // Adding null terminator to make buffer a valid string
 }
 
-// פונקציה לשליחת הודעה ללקוח
+// This function sends a message to the client
 void send_message(int sockfd, const char *message)
 {
     if (send(sockfd, message, strlen(message), 0) < 0)
@@ -89,6 +91,7 @@ void send_message(int sockfd, const char *message)
     }
 }
 
+// This function handles the chat mode between the client and server
 void handle_chat(int input_fd, int output_fd)
 {
     char buffer[BUFFER_SIZE];
@@ -110,11 +113,13 @@ void handle_chat(int input_fd, int output_fd)
     }
 }
 
+// This function handles the client connection and executes the specified command or enters chat mode
 int handle_client(int input_sockfd, int output_sockfd, char *e_command, char *i_command, char *o_command, char *b_command)
 {
     int input_fd = STDIN_FILENO;
     int output_fd = STDOUT_FILENO;
 
+    // Set the input and output file descriptors based on the command-line options
     if (i_command != NULL)
     {
         if (strncmp(i_command, "UDSSD", 5) == 0 || strncmp(i_command, "UDSSS", 5) == 0)
@@ -151,6 +156,7 @@ int handle_client(int input_sockfd, int output_sockfd, char *e_command, char *i_
         }
     }
 
+    // If the -e command is specified, execute the command
     if (e_command != NULL)
     {
         char *full_command = NULL;
@@ -161,7 +167,7 @@ int handle_client(int input_sockfd, int output_sockfd, char *e_command, char *i_
 
         int pid = fork();
         if (pid == 0)
-        { // child process
+        { // Child process
             if (input_fd != STDIN_FILENO)
             {
                 dup2(input_fd, STDIN_FILENO);
@@ -175,7 +181,7 @@ int handle_client(int input_sockfd, int output_sockfd, char *e_command, char *i_
             exit(0);
         }
         else if (pid > 0)
-        { // parent process
+        { // Parent process
             int status;
             waitpid(pid, &status, 0);
             if (WIFEXITED(status))
@@ -201,8 +207,10 @@ int handle_client(int input_sockfd, int output_sockfd, char *e_command, char *i_
     return -1;
 }
 
+// This function runs the server and client in a TCP connection
 void run_server_and_client(int server_port, char *client_hostname, int client_port, char *e_command, char *i_command, char *o_command)
 {
+    // Set up the server socket
     int server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sockfd < 0)
     {
@@ -233,6 +241,7 @@ void run_server_and_client(int server_port, char *client_hostname, int client_po
 
     printf("Server is listening on port %d\n", server_port);
 
+    // Set up the client socket
     int client_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (client_sockfd < 0)
     {
@@ -258,6 +267,7 @@ void run_server_and_client(int server_port, char *client_hostname, int client_po
     }
     printf("Connected to client\n");
 
+    // Accept the client connection to the server
     socklen_t client_addr_len = sizeof(client_addr);
     int input_sockfd = accept(server_sockfd, (struct sockaddr *)&client_addr, &client_addr_len);
     if (input_sockfd < 0)
@@ -267,15 +277,19 @@ void run_server_and_client(int server_port, char *client_hostname, int client_po
 
     printf("Client connected to server\n");
 
+    // Handle the client connection
     handle_client(input_sockfd, client_sockfd, e_command, i_command, o_command, NULL);
 
+    // Clean up
     close(input_sockfd);
     close(client_sockfd);
     close(server_sockfd);
 }
 
+// This function runs the UDP server and TCP client
 void run_udp_server_tcp_client(int udp_port, char *tcp_hostname, int tcp_port, char *e_command, char *i_command, char *o_command)
 {
+    // Set up the UDP server socket
     int udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (udp_sockfd < 0)
     {
@@ -301,6 +315,7 @@ void run_udp_server_tcp_client(int udp_port, char *tcp_hostname, int tcp_port, c
 
     printf("UDP server is listening on port %d\n", udp_port);
 
+    // Set up the TCP client socket
     int tcp_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (tcp_sockfd < 0)
     {
@@ -327,6 +342,7 @@ void run_udp_server_tcp_client(int udp_port, char *tcp_hostname, int tcp_port, c
 
     printf("Connected to TCP client\n");
 
+    // Handle the client connection
     char buffer[BUFFER_SIZE];
     struct sockaddr_in udp_client_addr;
     socklen_t udp_client_addr_len = sizeof(udp_client_addr);
@@ -344,11 +360,15 @@ void run_udp_server_tcp_client(int udp_port, char *tcp_hostname, int tcp_port, c
         handle_client(udp_sockfd, tcp_sockfd, e_command, i_command, o_command, NULL);
     }
 
+    // Clean up
     close(tcp_sockfd);
     close(udp_sockfd);
 }
+
+// This function runs the server and handles client connections
 void run_server(int port, char *e_command, char *i_command, char *o_command, char *b_command)
 {
+    // Set up the server socket
     int server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sockfd < 0)
     {
@@ -379,6 +399,7 @@ void run_server(int port, char *e_command, char *i_command, char *o_command, cha
 
     printf("Server is listening on port %d\n", port);
 
+    // Handle client connections
     while (1)
     {
         struct sockaddr_in client_addr;
@@ -419,8 +440,10 @@ void run_server(int port, char *e_command, char *i_command, char *o_command, cha
     close(server_sockfd);
 }
 
+// This function runs the client and handles the connection
 void run_client(char *hostname, int port, char *e_command, char *i_command, char *o_command, char *b_command)
 {
+    // Set up the client socket
     int client_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (client_sockfd < 0)
     {
@@ -450,12 +473,16 @@ void run_client(char *hostname, int port, char *e_command, char *i_command, char
 
     printf("Connected to server\n");
 
+    // Handle the client connection
     handle_client(client_sockfd, client_sockfd, e_command, i_command, o_command, b_command);
 
     close(client_sockfd);
 }
+
+// This function runs the UDP server
 void run_udp_server(int port, char *e_command, char *i_command, int timeout)
 {
+    // Set up the UDP server socket
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0)
     {
@@ -479,8 +506,10 @@ void run_udp_server(int port, char *e_command, char *i_command, int timeout)
         error("Error binding UDP socket");
     }
 
+    // Set a timeout for the server
     alarm(timeout);
 
+    // Handle client connections
     char buffer[BUFFER_SIZE];
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
@@ -510,8 +539,10 @@ void run_udp_server(int port, char *e_command, char *i_command, int timeout)
     close(sockfd);
 }
 
+// This function runs the UDP client
 void run_udp_client(char *hostname, int port, char *e_command, char *o_command, int timeout)
 {
+    // Set up the UDP client socket
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0)
     {
@@ -534,8 +565,10 @@ void run_udp_client(char *hostname, int port, char *e_command, char *o_command, 
         error("Invalid address or hostname");
     }
 
+    // Set a timeout for the client
     alarm(timeout);
 
+    // Handle the client connection
     int input_fd = STDIN_FILENO;
     int output_fd = sockfd;
     handle_client(input_fd, output_fd, e_command, NULL, o_command, NULL);
@@ -543,11 +576,13 @@ void run_udp_client(char *hostname, int port, char *e_command, char *o_command, 
     close(sockfd);
 }
 
+// This function runs the Unix Domain Socket (UDS) server
 void run_uds_server(char *socket_path, char *e_command, char *i_command, char *o_command, char *b_command, int is_datagram)
 {
     int sockfd;
     struct sockaddr_un serv_addr;
 
+    // Create the UDS socket based on the specified type (datagram or stream)
     if (is_datagram)
     {
         sockfd = socket(AF_UNIX, SOCK_DGRAM, 0);
@@ -584,6 +619,7 @@ void run_uds_server(char *socket_path, char *e_command, char *i_command, char *o
 
     printf("UDS server is listening on %s\n", socket_path);
 
+    // Handle client connections
     while (1)
     {
         int client_sockfd;
@@ -615,11 +651,13 @@ void run_uds_server(char *socket_path, char *e_command, char *i_command, char *o
     unlink(socket_path);
 }
 
+// This function runs the Unix Domain Socket (UDS) client
 void run_uds_client(char *socket_path, char *e_command, char *i_command, char *o_command, char *b_command, int is_datagram)
 {
     int sockfd;
     struct sockaddr_un serv_addr;
 
+    // Create the UDS client socket based on the specified type (datagram or stream)
     if (is_datagram)
     {
         sockfd = socket(AF_UNIX, SOCK_DGRAM, 0);
@@ -645,11 +683,13 @@ void run_uds_client(char *socket_path, char *e_command, char *i_command, char *o
 
     printf("Connected to UDS server\n");
 
+    // Handle the client connection
     handle_client(sockfd, sockfd, e_command, i_command, o_command, b_command);
 
     close(sockfd);
 }
 
+// This function runs the Unix Domain Socket (UDS) server and client
 void run_uds_server_client(char *server_socket_path, char *client_socket_path, char *e_command, char *i_command, char *o_command)
 {
     int server_sockfd, client_sockfd;
@@ -720,13 +760,11 @@ void run_uds_server_client(char *server_socket_path, char *client_socket_path, c
     cli_addr.sun_family = AF_UNIX;
     strncpy(cli_addr.sun_path, client_socket_path, sizeof(cli_addr.sun_path) - 1);
 
-    // if (!is_client_datagram)
-    // {
-        if (connect(client_sockfd, (struct sockaddr *)&cli_addr, sizeof(cli_addr)) < 0)
-        {
-            error("Error connecting to client UDS socket");
-        }
-    // }
+    // Connect the client socket to the server socket
+    if (connect(client_sockfd, (struct sockaddr *)&cli_addr, sizeof(cli_addr)) < 0)
+    {
+        error("Error connecting to client UDS socket");
+    }
 
     printf("Connected to UDS client on %s\n", client_socket_path);
 
@@ -745,13 +783,16 @@ void run_uds_server_client(char *server_socket_path, char *client_socket_path, c
         input_sockfd = server_sockfd;
     }
 
+    // Handle the client connection
     handle_client(input_sockfd, client_sockfd, e_command, i_command, o_command, NULL);
 
+    // Clean up
     close(input_sockfd);
     close(client_sockfd);
     close(server_sockfd);
     unlink(server_socket_path);
 }
+
 int main(int argc, char *argv[])
 {
     int opt;
@@ -766,6 +807,7 @@ int main(int argc, char *argv[])
     int timeout = 0;
     int is_datagram = 0;
 
+    // Parse the command-line options
     while ((opt = getopt(argc, argv, "e:i:o:b:t:")) != -1)
     {
         switch (opt)
@@ -811,10 +853,14 @@ int main(int argc, char *argv[])
                 uds_client_path = o_command + 5;
                 is_datagram = 0;
             }
-              else if (strncmp(o_command, "UDSSS", 5) == 0)
+            else if (strncmp(o_command, "UDSSS", 5) == 0)
             {
                 uds_server_path = o_command + 5;
                 is_datagram = 0;
+            }
+            else if (strncmp(o_command, "UDPC", 4) == 0)
+            {
+                udp_server_port = o_command + 4;
             }
             break;
         case 'b':
@@ -823,7 +869,7 @@ int main(int argc, char *argv[])
             {
                 tcp_server_port = b_command + 4;
             }
-             else if (strncmp(b_command, "UDSSS", 5) == 0)
+            else if (strncmp(b_command, "UDSSS", 5) == 0)
             {
                 uds_server_path = b_command + 5;
                 is_datagram = 0;
@@ -842,11 +888,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    // if (e_command == NULL)
-    // {
-    //     error("No -e flag");
-    // }
-
+    // Check if the necessary options are provided
     if (tcp_server_port != NULL && o_command != NULL && strncmp(o_command, "TCPC", 4) == 0)
     {
         char *client_info = o_command + 4;
@@ -893,18 +935,31 @@ int main(int argc, char *argv[])
     {
         run_uds_client(uds_client_path, e_command, i_command, o_command, b_command, is_datagram);
     }
-    else if (optind < argc)
+    else if (o_command != NULL && strncmp(o_command, "UDPC", 4) == 0)
     {
-        char *hostname = argv[optind];
-        int port = atoi(argv[optind + 1]);
-        if (i_command != NULL && strncmp(i_command, "UDPC", 4) == 0)
+        char *hostname = o_command + 4;
+        char *port_str = strchr(hostname, ',');
+        if (port_str == NULL)
         {
-            run_udp_client(hostname, port, e_command, o_command, timeout);
+            error("Invalid UDPC format");
         }
-        else
+        *port_str = '\0';
+        port_str++;
+        int port = atoi(port_str);
+        run_udp_client(hostname, port, e_command, o_command, timeout);
+    }
+    else if (o_command != NULL && strncmp(o_command, "TCPC", 4) == 0)
+    {
+        char *hostname = o_command + 4;
+        char *port_str = strchr(hostname, ',');
+        if (port_str == NULL)
         {
-            run_client(hostname, port, e_command, i_command, o_command, b_command);
+            error("Invalid TCPC format");
         }
+        *port_str = '\0';
+        port_str++;
+        int port = atoi(port_str);
+        run_client(hostname, port, e_command, i_command, o_command, b_command);
     }
     else
     {

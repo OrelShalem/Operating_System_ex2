@@ -269,31 +269,7 @@ void run_server(int port, char *e_command, char *i_command, char *o_command, cha
     close(server_sockfd);
 }
 
-void run_client(char *hostname, int port, char *e_command, char *i_command, char *o_command, char *b_command) {
-    int client_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (client_sockfd < 0) {
-        error("Error opening socket");
-    }
 
-    struct sockaddr_in serv_addr;
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-
-    if (inet_pton(AF_INET, hostname, &serv_addr.sin_addr) <= 0) {
-        error("Invalid address or hostname");
-    }
-
-    if (connect(client_sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        error("Connection failed");
-    }
-
-    printf("Connected to server\n");
-
-    handle_client(client_sockfd, client_sockfd, e_command, i_command, o_command, b_command);
-
-    close(client_sockfd);
-}
 
 int main(int argc, char *argv[]) {
     int opt;
@@ -321,6 +297,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 'o':
                 o_command = optarg;
+                if (strncmp(i_command, "TCPS", 4) == 0) {
+                    tcp_server_port = i_command + 4;
+                }
                 break;
             case 'b':
                 b_command = optarg;
@@ -351,10 +330,6 @@ int main(int argc, char *argv[]) {
     } else if (tcp_server_port != NULL) {
         int port = atoi(tcp_server_port);
         run_server(port, e_command, i_command, o_command, b_command);
-    } else if (optind < argc) {
-        char *hostname = argv[optind];
-        int port = atoi(argv[optind + 1]);
-        run_client(hostname, port, e_command, i_command, o_command, b_command);
     } else {
         error("Missing server or client information");
     }

@@ -2,7 +2,7 @@
 CC = gcc
 
 # Compiler flags
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -Wall -Wextra -g -fprofile-arcs -ftest-coverage
 
 # Source files
 MYNC_SRC = mync.c
@@ -48,6 +48,6 @@ $(UDS_SERVER_OBJ): $(UDS_SERVER_SRC)
 
 # Clean up
 clean:
-	rm -f $(MYNC_OBJ) $(TTT_OBJ) $(UDS_SERVER_OBJ) $(MYNC_EXECUTABLE) $(TTT_EXECUTABLE) $(UDS_SERVER_EXECUTABLE)
+	rm -f $(MYNC_OBJ) $(TTT_OBJ) $(UDS_SERVER_OBJ) $(MYNC_EXECUTABLE) $(TTT_EXECUTABLE) $(UDS_SERVER_EXECUTABLE) *.gcno *.gcda *.gcov
 
 .PHONY: all clean

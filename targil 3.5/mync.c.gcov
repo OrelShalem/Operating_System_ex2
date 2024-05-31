@@ -1,0 +1,340 @@
+        -:    0:Source:mync.c
+        -:    0:Source is newer than graph
+        -:    1:#include <stdio.h>
+        -:    2:#include <stdlib.h>
+        -:    3:#include <string.h>
+        -:    4:#include <unistd.h>
+        -:    5:#include <arpa/inet.h>
+        -:    6:#include <getopt.h>
+        -:    7:#include <sys/socket.h>
+        -:    8:#include <sys/types.h>
+        -:    9:#include <netinet/in.h>
+        -:   10:#include <fcntl.h>
+        -:   11:#include <sys/wait.h>
+        -:   12:#include <netdb.h>
+        -:   13:
+        -:   14:#define BUFFER_SIZE 1024
+        -:   15:
+        1:   16:void error(char *msg)
+        -:   17:{
+        1:   18:    perror(msg);
+        1:   19:    exit(EXIT_FAILURE);
+        -:   20:}
+        -:   21:
+    #####:   22:void run_program(char *args_as_string) {
+        -:   23:    // tokenize the string - split by space
+    #####:   24:    char *token = strtok(args_as_string, " ");
+        -:   25:
+    #####:   26:    if (token == NULL) {
+    #####:   27:        fprintf(stderr, "No arguments provided\n");
+    #####:   28:        exit(1);
+        -:   29:    }
+        -:   30:
+        -:   31:    // create an array of strings to store the arguments
+        -:   32:    char *args[100]; // increase or decrease this number as needed
+    #####:   33:    int n = 0;
+    #####:   34:    args[n++] = token; // add the first argument (program name)
+        -:   35:
+        -:   36:    // get the rest of the arguments
+    #####:   37:    while (token != NULL) {
+    #####:   38:        token = strtok(NULL, " ");
+    #####:   39:        if (token != NULL) {
+    #####:   40:            args[n++] = token;
+        -:   41:        }
+        -:   42:    }
+    #####:   43:    args[n] = NULL; // null-terminate the array
+        -:   44:
+        -:   45:    // fork and execute the program
+    #####:   46:    pid_t pid = fork();
+    #####:   47:    if (pid < 0) { // fork failed
+    #####:   48:        fprintf(stderr, "Fork failed\n");
+    #####:   49:        exit(1);
+    #####:   50:    } else if (pid == 0) { // child process
+    #####:   51:        execvp(args[0], args);
+    #####:   52:        fprintf(stderr, "Exec failed\n");
+    #####:   53:        exit(1);
+        -:   54:    } else { // parent process
+        -:   55:        int status;
+    #####:   56:        waitpid(pid, &status, 0); // wait for the child process to finish
+        -:   57:    }
+    #####:   58:}
+        -:   59:
+        -:   60:// פונקציה לקריאת הודעה מהלקוח
+    #####:   61:void receive_message(int sockfd, char *buffer, int buffer_size)
+        -:   62:{
+    #####:   63:    int valread = read(sockfd, buffer, buffer_size);
+    #####:   64:    if (valread < 0)
+        -:   65:    {
+    #####:   66:        error("Error reading from socket");
+        -:   67:    }
+    #####:   68:    buffer[valread] = '\0'; // Adding null terminator to make buffer a valid string
+    #####:   69:}
+        -:   70:
+        -:   71:// פונקציה לשליחת הודעה ללקוח
+    #####:   72:void send_message(int sockfd, const char *message)
+        -:   73:{
+    #####:   74:    if (send(sockfd, message, strlen(message), 0) < 0)
+        -:   75:    {
+    #####:   76:        error("Error sending message");
+        -:   77:    }
+    #####:   78:}
+        -:   79:
+    #####:   80:void handle_chat(int input_fd, int output_fd) {
+        -:   81:    char buffer[BUFFER_SIZE];
+        -:   82:    ssize_t valread;
+        -:   83:
+        -:   84:    while (1) {
+    #####:   85:        valread = read(input_fd, buffer, BUFFER_SIZE);
+    #####:   86:        if (valread <= 0) {
+    #####:   87:            break;
+        -:   88:        }
+    #####:   89:        buffer[valread] = '\0';
+    #####:   90:        printf("Received message: %s", buffer);
+        -:   91:
+    #####:   92:        printf("Enter message: ");
+    #####:   93:        fgets(buffer, BUFFER_SIZE, stdin);
+    #####:   94:        send_message(output_fd, buffer);
+        -:   95:    }
+    #####:   96:}
+        -:   97:
+    #####:   98:int handle_client(int input_sockfd, int output_sockfd, char *e_command, char *i_command, char *o_command, char *b_command) {
+    #####:   99:    int input_fd = STDIN_FILENO;
+    #####:  100:    int output_fd = STDOUT_FILENO;
+        -:  101:
+    #####:  102:    if (i_command != NULL) {
+    #####:  103:        input_fd = input_sockfd;
+        -:  104:    }
+    #####:  105:    if (o_command != NULL) {
+    #####:  106:        output_fd = output_sockfd;
+        -:  107:    }
+    #####:  108:    if (b_command != NULL) {
+    #####:  109:        input_fd = input_sockfd;
+    #####:  110:        output_fd = output_sockfd;
+        -:  111:    }
+        -:  112:
+    #####:  113:    if (e_command != NULL) {
+    #####:  114:        char *full_command = NULL;
+    #####:  115:        full_command = malloc(strlen(e_command) + strlen(e_command + 6) + 2);
+    #####:  116:        strcpy(full_command, e_command);
+    #####:  117:        strcat(full_command, " ");
+    #####:  118:        strcat(full_command, e_command + 6);
+        -:  119:
+    #####:  120:        int pid = fork();
+    #####:  121:        if (pid == 0) { // child process
+    #####:  122:            if (input_fd != STDIN_FILENO) {
+    #####:  123:                dup2(input_fd, STDIN_FILENO);
+        -:  124:            }
+    #####:  125:            if (output_fd != STDOUT_FILENO) {
+    #####:  126:                dup2(output_fd, STDOUT_FILENO);
+        -:  127:            }
+    #####:  128:            run_program(full_command);
+    #####:  129:            free(full_command);
+    #####:  130:            exit(0);
+    #####:  131:        } else if (pid > 0) { // parent process
+        -:  132:            int status;
+    #####:  133:            waitpid(pid, &status, 0);
+    #####:  134:            if (WIFEXITED(status)) {
+    #####:  135:                return WEXITSTATUS(status);
+        -:  136:            } else {
+    #####:  137:                return -1;
+        -:  138:            }
+        -:  139:        } else {
+    #####:  140:            error("Fork failed");
+        -:  141:        }
+        -:  142:    } else {
+        -:  143:        // No -e flag provided, enter chat mode
+    #####:  144:        handle_chat(input_sockfd, output_sockfd);
+        -:  145:    }
+        -:  146:
+    #####:  147:    return -1;
+        -:  148:}
+        -:  149:
+    #####:  150:void run_server_and_client(int server_port, char *client_hostname, int client_port, char *e_command, char *i_command, char *o_command) {
+    #####:  151:    int server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    #####:  152:    if (server_sockfd < 0) {
+    #####:  153:        error("Error opening server socket");
+        -:  154:    }
+        -:  155:
+    #####:  156:    int optval = 1;
+    #####:  157:    if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
+    #####:  158:        error("Error setting server socket options");
+        -:  159:    }
+        -:  160:
+        -:  161:    struct sockaddr_in serv_addr;
+    #####:  162:    memset(&serv_addr, 0, sizeof(serv_addr));
+    #####:  163:    serv_addr.sin_family = AF_INET;
+    #####:  164:    serv_addr.sin_port = htons(server_port);
+    #####:  165:    serv_addr.sin_addr.s_addr = INADDR_ANY;
+        -:  166:
+    #####:  167:    if (bind(server_sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    #####:  168:        error("Error on binding server socket");
+        -:  169:    }
+        -:  170:
+    #####:  171:    if (listen(server_sockfd, 5) < 0) {
+    #####:  172:        error("Error on listen");
+        -:  173:    }
+        -:  174:
+    #####:  175:    printf("Server is listening on port %d\n", server_port);
+        -:  176:
+    #####:  177:    int client_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    #####:  178:    if (client_sockfd < 0) {
+    #####:  179:        error("Error opening client socket");
+        -:  180:    }
+        -:  181:
+        -:  182:   struct sockaddr_in client_addr;
+    #####:  183:    memset(&client_addr, 0, sizeof(client_addr));
+    #####:  184:    client_addr.sin_family = AF_INET;
+    #####:  185:    client_addr.sin_port = htons(client_port);
+        -:  186:
+    #####:  187:    struct hostent *client_host = gethostbyname(client_hostname);
+    #####:  188:    if (client_host == NULL) {
+    #####:  189:        error("Invalid client hostname");
+        -:  190:    }
+        -:  191:
+    #####:  192:    memcpy(&client_addr.sin_addr, client_host->h_addr_list[0], sizeof(struct in_addr));
+        -:  193:
+    #####:  194:    if (connect(client_sockfd, (struct sockaddr *)&client_addr, sizeof(client_addr)) < 0) {
+    #####:  195:        error("Connection to client failed");
+        -:  196:    }
+    #####:  197:    printf("Connected to client\n");
+        -:  198:
+    #####:  199:    socklen_t client_addr_len = sizeof(client_addr);
+    #####:  200:    int input_sockfd = accept(server_sockfd, (struct sockaddr *)&client_addr, &client_addr_len);
+    #####:  201:    if (input_sockfd < 0) {
+    #####:  202:        error("Error on accept");
+        -:  203:    }
+        -:  204:
+    #####:  205:    printf("Client connected to server\n");
+        -:  206:
+    #####:  207:    handle_client(input_sockfd, client_sockfd, e_command, i_command, o_command, NULL);
+        -:  208:
+    #####:  209:    close(input_sockfd);
+    #####:  210:    close(client_sockfd);
+    #####:  211:    close(server_sockfd);
+    #####:  212:}
+    #####:  213:void run_server(int port, char *e_command, char *i_command, char *o_command, char *b_command) {
+    #####:  214:    int server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    #####:  215:    if (server_sockfd < 0) {
+    #####:  216:        error("Error opening socket");
+        -:  217:    }
+        -:  218:
+    #####:  219:    int optval = 1;
+    #####:  220:    if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
+    #####:  221:        error("Error setting socket options");
+        -:  222:    }
+        -:  223:
+        -:  224:    struct sockaddr_in serv_addr;
+    #####:  225:    memset(&serv_addr, 0, sizeof(serv_addr));
+    #####:  226:    serv_addr.sin_family = AF_INET;
+    #####:  227:    serv_addr.sin_port = htons(port);
+    #####:  228:    serv_addr.sin_addr.s_addr = INADDR_ANY;
+        -:  229:
+    #####:  230:    if (bind(server_sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    #####:  231:        error("Error on binding");
+        -:  232:    }
+        -:  233:
+    #####:  234:    if (listen(server_sockfd, 5) < 0) {
+    #####:  235:        error("Error on listen");
+        -:  236:    }
+        -:  237:
+    #####:  238:    printf("Server is listening on port %d\n", port);
+        -:  239:
+    #####:  240:    while (1) {
+        -:  241:        struct sockaddr_in client_addr;
+    #####:  242:        socklen_t client_addr_len = sizeof(client_addr);
+    #####:  243:        int client_sockfd = accept(server_sockfd, (struct sockaddr *)&client_addr, &client_addr_len);
+    #####:  244:        if (client_sockfd < 0) {
+    #####:  245:            error("Error on accept");
+        -:  246:        }
+        -:  247:
+    #####:  248:        printf("Client connected\n");
+        -:  249:
+    #####:  250:        int child_return_code = handle_client(client_sockfd, client_sockfd, e_command, i_command, o_command, b_command);
+        -:  251:
+    #####:  252:        if (child_return_code == 0) {
+    #####:  253:            printf("Child process finished successfully.\n");
+    #####:  254:            close(client_sockfd); // Close the client socket
+    #####:  255:            break; // Exit the loop if the child process finished successfully
+    #####:  256:        } else if (child_return_code > 0) {
+    #####:  257:            printf("Child process finished with return code %d.\n", child_return_code);
+        -:  258:        } else {
+    #####:  259:            printf("Child process did not exit normally.\n");
+        -:  260:        }
+        -:  261:
+    #####:  262:        close(client_sockfd);
+        -:  263:
+    #####:  264:        if (child_return_code != 0) {
+    #####:  265:            break; // Exit the loop if the child process has finished with a non-zero return code
+        -:  266:        }
+        -:  267:    }
+        -:  268:
+    #####:  269:    close(server_sockfd);
+    #####:  270:}
+        -:  271:
+        -:  272:
+        -:  273:
+        1:  274:int main(int argc, char *argv[]) {
+        -:  275:    int opt;
+        1:  276:    char *e_command = NULL;
+        1:  277:    char *i_command = NULL;
+        1:  278:    char *o_command = NULL;
+        1:  279:    char *b_command = NULL;
+        1:  280:    char *tcp_server_port = NULL;
+        -:  281:    // char *tcp_client_info = NULL;
+        -:  282:
+        1:  283:    if (argc < 2) {
+        1:  284:        error("Not enough arguments");
+        -:  285:    }
+        -:  286:
+    #####:  287:    while ((opt = getopt(argc, argv, "e:i:o:b:")) != -1) {
+    #####:  288:        switch (opt) {
+    #####:  289:            case 'e':
+    #####:  290:                e_command = optarg;
+    #####:  291:                break;
+    #####:  292:            case 'i':
+    #####:  293:                i_command = optarg;
+    #####:  294:                if (strncmp(i_command, "TCPS", 4) == 0) {
+    #####:  295:                    tcp_server_port = i_command + 4;
+        -:  296:                }
+    #####:  297:                break;
+    #####:  298:            case 'o':
+    #####:  299:                o_command = optarg;
+    #####:  300:                if (strncmp(i_command, "TCPS", 4) == 0) {
+    #####:  301:                    tcp_server_port = i_command + 4;
+        -:  302:                }
+    #####:  303:                break;
+    #####:  304:            case 'b':
+    #####:  305:                b_command = optarg;
+    #####:  306:                if (strncmp(b_command, "TCPS", 4) == 0) {
+    #####:  307:                    tcp_server_port = b_command + 4;
+        -:  308:                }
+    #####:  309:                break;
+    #####:  310:            default:
+    #####:  311:                error("Missing flags");
+        -:  312:        }
+        -:  313:    }
+        -:  314:
+        -:  315:    // הסרנו את הבדיקה של e_command כאן
+        -:  316:
+    #####:  317:    if (b_command != NULL && (i_command != NULL || o_command != NULL)) {
+    #####:  318:        error("Cannot use -b and -i or -o");
+        -:  319:    }
+        -:  320:
+    #####:  321:    if (tcp_server_port != NULL && o_command != NULL && strncmp(o_command, "TCPC", 4) == 0) {
+    #####:  322:        char *client_info = o_command + 4;
+    #####:  323:        char *client_hostname = strtok(client_info, ",");
+    #####:  324:        char *client_port_str = strtok(NULL, ",");
+    #####:  325:        if (client_hostname == NULL || client_port_str == NULL) {
+    #####:  326:            error("Invalid client information");
+        -:  327:        }
+    #####:  328:        int client_port = atoi(client_port_str);
+    #####:  329:        run_server_and_client(atoi(tcp_server_port), client_hostname, client_port, e_command, i_command, o_command);
+    #####:  330:    } else if (tcp_server_port != NULL) {
+    #####:  331:        int port = atoi(tcp_server_port);
+    #####:  332:        run_server(port, e_command, i_command, o_command, b_command);
+        -:  333:    } else {
+    #####:  334:        error("Missing server or client information");
+        -:  335:    }
+        -:  336:
+    #####:  337:    return 0;
+        -:  338:}
